@@ -5,6 +5,7 @@ import {
   doc,
   setDoc,
   getDoc,
+  getDocs,
   onSnapshot,
   addDoc,
   updateDoc,
@@ -48,13 +49,7 @@ import { Input } from '@/src/components/ui/input';
 import { Badge } from '@/src/components/ui/badge';
 import { Skeleton } from '@/src/components/ui/skeleton';
 import { ScrollArea } from '@/src/components/ui/scroll-area';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/src/components/ui/select';
+import { Select } from '@/src/components/ui/select';
 
 interface Transaction {
   id: string;
@@ -355,22 +350,12 @@ export function CurrencyManager({ user }: CurrencyManagerProps) {
                 <Select
                   value={settings?.baseCurrency || 'USD'}
                   onValueChange={(val) => updateSettings({ baseCurrency: val })}
-                >
-                  <SelectTrigger className="bg-slate-800 border-slate-700 text-white h-12">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-800 text-slate-300">
-                    {MAJOR_CURRENCIES.map((currency) => (
-                      <SelectItem key={currency.code} value={currency.code} className="cursor-pointer">
-                        <span className="flex items-center gap-2">
-                          <span>{currency.flag}</span>
-                          <span>{currency.code}</span>
-                          <span className="text-slate-500 text-xs">- {currency.name}</span>
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  className="bg-slate-800 border-slate-700 text-white h-12"
+                  options={MAJOR_CURRENCIES.map((currency) => ({
+                    value: currency.code,
+                    label: `${currency.flag} ${currency.code} - ${currency.name}`,
+                  }))}
+                />
               </div>
 
               <div className="space-y-2">
@@ -517,21 +502,15 @@ export function CurrencyManager({ user }: CurrencyManagerProps) {
                 <Select
                   value={newTx.currency}
                   onValueChange={(val) => setNewTx({ ...newTx, currency: val })}
-                >
-                  <SelectTrigger className="bg-slate-800 border-slate-700 text-white h-10">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-800 text-slate-300">
-                    {(settings?.supportedCurrencies || ['USD']).map((code) => {
-                      const currency = MAJOR_CURRENCIES.find((c) => c.code === code);
-                      return (
-                        <SelectItem key={code} value={code} className="cursor-pointer">
-                          {currency?.flag} {code}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+                  className="bg-slate-800 border-slate-700 text-white h-10"
+                  options={(settings?.supportedCurrencies || ['USD']).map((code) => {
+                    const currency = MAJOR_CURRENCIES.find((c) => c.code === code);
+                    return {
+                      value: code,
+                      label: `${currency?.flag ?? ''} ${code}`,
+                    };
+                  })}
+                />
                 <Input
                   type="date"
                   value={newTx.date}
@@ -551,19 +530,16 @@ export function CurrencyManager({ user }: CurrencyManagerProps) {
 
           <div className="flex items-center gap-3">
             <Filter size={16} className="text-slate-500" />
-            <Select value={filterCurrency} onValueChange={setFilterCurrency}>
-              <SelectTrigger className="bg-slate-800 border-slate-700 text-white h-9 w-48">
-                <SelectValue placeholder="Filter by currency" />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-900 border-slate-800 text-slate-300">
-                <SelectItem value="all" className="cursor-pointer">All Currencies</SelectItem>
-                {(settings?.supportedCurrencies || []).map((code) => (
-                  <SelectItem key={code} value={code} className="cursor-pointer">
-                    {code}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Select
+              value={filterCurrency}
+              onValueChange={setFilterCurrency}
+              className="bg-slate-800 border-slate-700 text-white h-9 w-48"
+              options={[
+                { value: 'all', label: 'All Currencies' },
+                ...(settings?.supportedCurrencies || []).map((code) => ({ value: code, label: code })),
+              ]}
+              placeholder="Filter by currency"
+            />
             <Badge className="bg-slate-800 text-slate-400 border-slate-700">
               {filteredTransactions.length} transactions
             </Badge>
@@ -601,18 +577,12 @@ export function CurrencyManager({ user }: CurrencyManagerProps) {
                           <Select
                             value={editForm.currency}
                             onValueChange={(val) => setEditForm({ ...editForm, currency: val })}
-                          >
-                            <SelectTrigger className="bg-slate-800 border-slate-700 text-white h-8 w-24 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="bg-slate-900 border-slate-800 text-slate-300">
-                              {(settings?.supportedCurrencies || ['USD']).map((code) => (
-                                <SelectItem key={code} value={code} className="cursor-pointer text-xs">
-                                  {code}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            className="bg-slate-800 border-slate-700 text-white h-8 w-24 text-xs"
+                            options={(settings?.supportedCurrencies || ['USD']).map((code) => ({
+                              value: code,
+                              label: code,
+                            }))}
+                          />
                           <Input
                             type="date"
                             value={editForm.date}

@@ -73,7 +73,7 @@ export function AnomalyDashboard({ user }: AnomalyDashboardProps) {
         const docs = snapshot.docs.map((d) => ({
           id: d.id,
           ...d.data(),
-        })) as Anomaly[];
+        })) as AnomalyWithHistory[];
         setAnomalies(docs);
         setLargeTxCount(
           docs.filter((a) => a.type === "large_transaction").length,
@@ -367,9 +367,13 @@ async function runDetection(userId: string) {
     newAnomalies.push({
       userId,
       type: "large_transaction",
+      severity: "high",
       category: tx.category,
       amount: tx.amount,
+      averageAmount: catBaseline.mean,
+      deviation: Math.round((tx.amount / Math.max(catBaseline.mean, 1)) * 100) / 100,
       description: `Transaction of $${tx.amount.toLocaleString()} in ${tx.category} exceeds the category average by more than 2 standard deviations.`,
+      date: tx.date,
       confidenceScore: confidence,
       transactionId: tx.id,
       dismissed: false,
@@ -391,20 +395,22 @@ async function runDetection(userId: string) {
       spike.baseline.monthlyTotals.length;
     const pctOver =
       avgMonthly > 0 ? Math.round((lastMonthTotal / avgMonthly - 1) * 100) : 0;
+    const latestTx = spike.transactions[spike.transactions.length - 1];
 
     newAnomalies.push({
       userId,
       type: "category_spike",
+      severity: "medium",
       category: spike.category,
       amount: spike.amount,
+      averageAmount: spike.baseline.mean,
+      deviation: Math.round((spike.amount / Math.max(spike.baseline.mean, 1)) * 100) / 100,
       description: `${spike.category} spending is ${pctOver}% above the 3-month average.`,
+      date: latestTx?.date ?? new Date(),
       confidenceScore: confidence,
-      transactionId:
-        spike.transactions[spike.transactions.length - 1]?.id || "",
+      transactionId: latestTx?.id || "",
       dismissed: false,
-      createdAt:
-        spike.transactions[spike.transactions.length - 1]?.date ||
-        new Date().toISOString(),
+      createdAt: latestTx?.date ?? new Date(),
     });
   });
 

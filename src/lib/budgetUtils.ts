@@ -50,6 +50,42 @@ export interface BudgetCategoryInput {
   rolloverPercentage?: number;
 }
 
+export interface Transaction {
+  id: string;
+  userId: string;
+  amount: number;
+  category: string;
+  type: "expense" | "income";
+  date: Date;
+  description?: string;
+}
+
+export interface CategoryBudgetSuggestion {
+  category: string;
+  averageSpending: number;
+  suggestedAmount: number;
+  previousMonthSpending: number;
+  modifiedAmount?: number;
+  status: "accepted" | "rejected" | "modified";
+}
+
+export interface BudgetComparison {
+  category: string;
+  previous: number;
+  suggested: number;
+  difference: number;
+}
+
+export interface BudgetPlan {
+  userId: string;
+  month: string;
+  totalBudget: number;
+  categoryBudgets: Record<string, number>;
+  confidenceScore: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const DEFAULT_CATEGORIES = [
   'Housing',
   'Food & Dining',
@@ -78,6 +114,186 @@ export function getMonthLabel(monthKey: string): string {
   const [year, month] = monthKey.split('-').map(Number);
   const date = new Date(year, month - 1, 1);
   return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+export async function fetchLast3MonthsTransactions(
+  userId: string,
+): Promise<Transaction[]> {
+  const now = new Date();
+  const startDate = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+  try {
+    const q = query(
+      collection(db, 'transactions'),
+      where('userId', '==', userId),
+      where('date', '>=', startDate),
+      orderBy('date', 'desc'),
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        userId: data.userId || '',
+        amount: Number(data.amount) || 0,
+        category: data.category || 'Other',
+        type: data.type === 'income' ? 'income' : 'expense',
+        date: toDate(data.date) || new Date(),
+        description: data.description || '',
+      };
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'transactions');
+    return [];
+  }
+}
+
+export async function fetchPreviousMonthTransactions(
+  userId: string,
+): Promise<Transaction[]> {
+  const now = new Date();
+  const startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const endDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  try {
+    const q = query(
+      collection(db, 'transactions'),
+      where('userId', '==', userId),
+      where('date', '>=', startDate),
+      where('date', '<', endDate),
+      orderBy('date', 'desc'),
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        userId: data.userId || '',
+        amount: Number(data.amount) || 0,
+        category: data.category || 'Other',
+        type: data.type === 'income' ? 'income' : 'expense',
+        date: toDate(data.date) || new Date(),
+        description: data.description || '',
+      };
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'transactions');
+    return [];
+  }
+}
+
+export function generateBudgetSuggestions(
+  transactions: Transaction[],
+  previousSpending: Record<string, number>,
+): CategoryBudgetSuggestion[] {
+  const categoryTotals: Record<string, { total: number; count: number }> = {};
+  transactions.forEach((tx) => {
+    if (tx.type !== 'expense') return;
+    const category = tx.category || 'Other';
+    const entry = categoryTotals[category] || { total: 0, count: 0 };
+    entry.total += tx.amount;
+    entry.count += 1;
+    categoryTotals[category] = entry;
+  });
+
+  return Object.entries(categoryTotals).map(([category, entry]) => {
+    const averageSpending = Math.round((entry.total / Math.max(entry.count, 1)) * 100) / 100;
+    const previousMonthSpending = Math.round((previousSpending[category] || averageSpending) * 100) / 100;
+    const suggestedAmount = Math.round((averageSpending + previousMonthSpending * 0.1) * 100) / 100;
+    return {
+      category,
+      averageSpending,
+      previousMonthSpending,
+      suggestedAmount,
+      modifiedAmount: suggestedAmount,
+      status: 'accepted',
+    };
+  });
+}
+
+export function calculateTotalBudget(
+  suggestions: CategoryBudgetSuggestion[],
+): number {
+  return suggestions.reduce((sum, suggestion) => {
+    const amount = suggestion.modifiedAmount ?? suggestion.suggestedAmount;
+    return sum + amount;
+  }, 0);
+}
+
+export function calculateConfidenceScore(
+  transactions: Transaction[],
+  baseline: Record<string, number>,
+): number {
+  const categories = Object.keys(baseline).length;
+  const months = new Set(transactions.map((t) => `${t.date.getFullYear()}-${String(t.date.getMonth() + 1).padStart(2, '0')}`)).size;
+  const dataScore = Math.min(months / 3, 1) * 40;
+  const categoryScore = Math.min(categories / 10, 1) * 35;
+  const volumeScore = Math.min(transactions.length / 60, 1) * 25;
+  return Math.round(dataScore + categoryScore + volumeScore);
+}
+
+export async function fetchBudgetFromFirestore(
+  userId: string,
+  month: string,
+): Promise<BudgetPlan | null> {
+  try {
+    const ref = doc(db, 'budgets', `${userId}_${month}`);
+    const snap = await getDocs(query(collection(db, 'budgets'), where('userId','==',userId), where('month','==',month)));
+    if (!snap.empty) {
+      const data = snap.docs[0].data() as any;
+      return {
+        userId: data.userId || userId,
+        month: data.month || month,
+        totalBudget: data.totalBudget || 0,
+        categoryBudgets: data.categoryBudgets || {},
+        confidenceScore: data.confidenceScore || 0,
+        createdAt: data.createdAt || new Date().toISOString(),
+        updatedAt: data.updatedAt || new Date().toISOString(),
+      };
+    }
+    return null;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'budgets');
+    return null;
+  }
+}
+
+export async function saveBudgetToFirestore(
+  budgetData: BudgetPlan,
+): Promise<void> {
+  try {
+    const ref = doc(db, 'budgets', `${budgetData.userId}_${budgetData.month}`);
+    await setDoc(ref, {
+      ...budgetData,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, 'budgets');
+    throw error;
+  }
+}
+
+export function generateBudgetComparison(
+  suggestions: CategoryBudgetSuggestion[],
+  previousSpending: Record<string, number>,
+): BudgetComparison[] {
+  return suggestions.map((suggestion) => {
+    const suggested = suggestion.modifiedAmount ?? suggestion.suggestedAmount;
+    const previous = previousSpending[suggestion.category] || 0;
+    return {
+      category: suggestion.category,
+      previous,
+      suggested,
+      difference: Math.round((suggested - previous) * 100) / 100,
+    };
+  });
+}
+
+export function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
 }
 
 export async function fetchBudgetCategories(userId: string): Promise<BudgetCategory[]> {

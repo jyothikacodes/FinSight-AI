@@ -48,7 +48,8 @@ import {
   MessageSquare,
   LineChart,
   Globe,
-  Shield
+  Shield,
+  Wallet
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
@@ -172,12 +173,15 @@ export function LogoIcon({ className = "h-8 w-8" }: { className?: string }) {
 
 // Pages (defined in separate files eventually, for now as sub-components)
 import { Dashboard } from './components/Dashboard';
+import { AnomalyDashboard } from './components/anomaly/AnomalyDashboard';
 import { AnalysisList } from './components/AnalysisList';
 import { FileUpload } from './components/FileUpload';
 import { AnalysisDetail } from './components/AnalysisDetail';
 import { AdminPanel } from './components/AdminPanel';
 import { CommandPalette } from './components/dashboard/CommandPalette';
 import { CurrencyManager } from './components/currency/CurrencyManager';
+import { CashFlowDashboard } from './components/cashflow/CashFlowDashboard';
+import { SubscriptionAnalyzer } from './components/subscriptions/SubscriptionAnalyzer';
 import { CategoryTrends } from './components/trends/CategoryTrends';
 import { GoalPlanner } from './components/goals/GoalPlanner';
 import { BillReminders } from './components/bills/BillReminders';
@@ -980,8 +984,8 @@ export default function App() {
                 <Dashboard
                   user={user}
                   userProfile={userProfile}
-                  onAction={(tab) => setActiveTab(tab)}
-                  onDocSelect={(id) => openAnalysisView(id, "dashboard")}
+                  onAction={(tab: string) => setActiveTab(tab)}
+                  onDocSelect={(id: string) => openAnalysisView(id, "dashboard")}
                 />
               </motion.div>
             )}
@@ -1010,7 +1014,7 @@ export default function App() {
                 <AnalysisList
                   type="all"
                   user={user}
-                  onSelect={(id) => openAnalysisView(id, "list")}
+                  onSelect={(id: string) => openAnalysisView(id, "list")}
                 />
               </motion.div>
             )}
@@ -1038,7 +1042,7 @@ export default function App() {
                 <AnalysisList
                   type="completed"
                   user={user}
-                  onSelect={(id) => openAnalysisView(id, "list")}
+                  onSelect={(id: string) => openAnalysisView(id, "list")}
                 />
               </motion.div>
             )}
@@ -1057,18 +1061,6 @@ export default function App() {
 
             {activeTab === "goals" && (
               <motion.div
-                key="goals"
-                initial={false}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                className="space-y-6"
-              >
-                <GoalPlanner user={user} />
-              </motion.div>
-            )}
-
-            {activeTab === 'goals' && (
-              <motion.div 
                 key="goals"
                 initial={false}
                 animate={{ opacity: 1, x: 0 }}
@@ -1185,7 +1177,7 @@ export default function App() {
               >
                 <FileUpload
                   user={user}
-                  onComplete={(id) => openAnalysisView(id, "upload")}
+                  onComplete={(id: string) => openAnalysisView(id, "upload")}
                   onCancel={() => setActiveTab("dashboard")}
                 />
               </motion.div>

@@ -32,6 +32,7 @@ import {
 import { Download, Loader2, TrendingUp, Filter, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import html2canvas from 'html2canvas';
+import { PeriodSelector } from '@/src/components/trends/PeriodSelector';
 import { jsPDF } from 'jspdf';
 import {
   buildPeriodConfig,

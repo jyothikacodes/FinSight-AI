@@ -5,13 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/ca
 import { Input } from '@/src/components/ui/input';
 import { Button } from '@/src/components/ui/button';
 import { Badge } from '@/src/components/ui/badge';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/src/components/ui/select';
+import { Select } from '@/src/components/ui/select';
 
 interface CurrencyConverterProps {
   defaultFrom?: string;
@@ -104,22 +98,15 @@ export function CurrencyConverter({
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">To</label>
             <div className="h-12 flex items-center">
-              <Select value={toCurrency} onValueChange={setToCurrency}>
-                <SelectTrigger className="bg-slate-800 border-slate-700 text-white h-12 text-lg font-semibold">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-800 text-slate-300">
-                  {MAJOR_CURRENCIES.map((currency) => (
-                    <SelectItem key={currency.code} value={currency.code} className="cursor-pointer">
-                      <span className="flex items-center gap-2">
-                        <span>{currency.flag}</span>
-                        <span>{currency.code}</span>
-                        <span className="text-slate-500 text-xs">({currency.name})</span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Select
+                value={toCurrency}
+                onValueChange={setToCurrency}
+                className="bg-slate-800 border-slate-700 text-white h-12 text-lg font-semibold"
+                options={MAJOR_CURRENCIES.map((currency) => ({
+                  value: currency.code,
+                  label: `${currency.flag} ${currency.code} (${currency.name})`,
+                }))}
+              />
             </div>
           </div>
         </div>

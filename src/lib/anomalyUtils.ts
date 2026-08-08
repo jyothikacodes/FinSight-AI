@@ -12,6 +12,7 @@ import {
   doc,
   setDoc,
   serverTimestamp,
+  limit,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "./firebase";
 import { format, subMonths, startOfMonth } from "date-fns";
@@ -46,6 +47,7 @@ export interface Anomaly {
   createdAt: any;
   comparisonPeriod?: string;
   confidence?: number;
+  confidenceScore?: number;
 }
 
 export interface AnomalySummary {
@@ -57,6 +59,14 @@ export interface AnomalySummary {
   byCategory: Record<string, number>;
   weeklyData: { week: string; count: number }[];
 }
+
+export interface CategoryBaselineEntry {
+  mean: number;
+  stdDev: number;
+  monthlyTotals: number[];
+}
+
+export type CategoryBaseline = Map<string, CategoryBaselineEntry>;
 
 export async function fetchAnomalies(
   userId: string,
@@ -71,7 +81,14 @@ export async function fetchAnomalies(
     const snap = await getDocs(
       query(collection(db, "anomalies"), ...constraints),
     );
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Anomaly);
+    return snap.docs.map((d) => {
+      const data = d.data() as any;
+      return {
+        id: d.id,
+        ...data,
+        confidenceScore: data.confidenceScore ?? data.confidence,
+      } as Anomaly;
+    });
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, "anomalies");
     return [];
@@ -243,6 +260,145 @@ export function detectAnomalies(
   );
   return anomalies;
 }
+
+export function calculateCategoryBaseline(
+  transactions: Transaction[],
+): CategoryBaseline {
+  const categories = new Map<
+    string,
+    { amounts: number[]; monthTotals: Map<string, number> }
+  >();
+
+  transactions.forEach((t) => {
+    const category = t.category || "Other";
+    const date = t.date instanceof Date ? t.date : new Date(t.date as any);
+    const monthKey = format(date, "yyyy-MM");
+    const entry = categories.get(category) || {
+      amounts: [],
+      monthTotals: new Map<string, number>(),
+    };
+    entry.amounts.push(Math.abs(t.amount));
+    entry.monthTotals.set(
+      monthKey,
+      (entry.monthTotals.get(monthKey) || 0) + Math.abs(t.amount),
+    );
+    categories.set(category, entry);
+  });
+
+  const baseline = new Map<string, CategoryBaselineEntry>();
+  categories.forEach((entry, category) => {
+    const mean =
+      entry.amounts.reduce((sum, amount) => sum + amount, 0) /
+      Math.max(entry.amounts.length, 1);
+    const variance =
+      entry.amounts.reduce((sum, amount) => sum + Math.pow(amount - mean, 2), 0) /
+      Math.max(entry.amounts.length, 1);
+    baseline.set(category, {
+      mean: Math.round(mean * 100) / 100,
+      stdDev: Math.round(Math.sqrt(variance) * 100) / 100,
+      monthlyTotals: Array.from(entry.monthTotals.values()),
+    });
+  });
+
+  return baseline;
+}
+
+export function detectLargeTransactions(
+  transactions: Transaction[],
+  baseline: CategoryBaseline,
+): Transaction[] {
+  return transactions.filter((transaction) => {
+    const category = transaction.category || "Other";
+    const baselineEntry = baseline.get(category);
+    if (!baselineEntry) return false;
+    const amount = Math.abs(transaction.amount);
+    return amount > baselineEntry.mean + baselineEntry.stdDev * 2;
+  });
+}
+
+export function detectCategorySpikes(
+  transactions: Transaction[],
+  baseline: CategoryBaseline,
+): Array<{
+  category: string;
+  amount: number;
+  baseline: CategoryBaselineEntry;
+  transactions: Transaction[];
+}> {
+  const spikes: Array<{
+    category: string;
+    amount: number;
+    baseline: CategoryBaselineEntry;
+    transactions: Transaction[];
+  }> = [];
+
+  baseline.forEach((entry, category) => {
+    const totals = entry.monthlyTotals;
+    if (totals.length < 2) return;
+    const latest = totals[totals.length - 1];
+    const average =
+      totals.slice(0, -1).reduce((sum, val) => sum + val, 0) /
+      Math.max(totals.length - 1, 1);
+    if (average > 0 && latest > average * 1.5 && latest - average > 500) {
+      spikes.push({
+        category,
+        amount: latest,
+        baseline: entry,
+        transactions: transactions.filter((t) => t.category === category),
+      });
+    }
+  });
+
+  return spikes;
+}
+
+export function calculateConfidenceScore(
+  type: "large_transaction" | "category_spike",
+  amount: number,
+  mean: number,
+  stdDev: number,
+): number {
+  const varianceFactor = stdDev || Math.max(mean * 0.1, 1);
+  const score = Math.round(
+    Math.min(
+      95,
+      Math.max(
+        30,
+        (amount - mean) / varianceFactor * 10 + 70,
+      ),
+    ),
+  );
+  return score;
+}
+
+export async function checkHistoricalSimilarAnomalies(
+  userId: string,
+  category: string,
+  type: Anomaly["type"],
+  amount: number,
+): Promise<number> {
+  try {
+    const q = query(
+      collection(db, "anomalies"),
+      where("userId", "==", userId),
+      where("type", "==", type),
+      where("category", "==", category),
+      where("dismissed", "==", false),
+      orderBy("createdAt", "desc"),
+      limit(10),
+    );
+    const snap = await getDocs(q);
+    return snap.docs.filter((doc) => {
+      const data = doc.data() as any;
+      const existingAmount = Number(data.amount) || 0;
+      return Math.abs(existingAmount - amount) / Math.max(amount, 1) < 0.25;
+    }).length;
+  } catch (error) {
+    return 0;
+  }
+}
+
+export { fetchTransactions as fetchUserTransactions };
 
 export function getAnomalySummary(anomalies: Anomaly[]): AnomalySummary {
   const byCategory: Record<string, number> = {};

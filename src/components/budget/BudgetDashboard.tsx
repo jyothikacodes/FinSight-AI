@@ -167,8 +167,8 @@ export function BudgetDashboard({ user }: { user: any }) {
       totalBudget: calculateTotalBudget(newSuggestions),
       categoryBudgets,
       confidenceScore,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
     try {

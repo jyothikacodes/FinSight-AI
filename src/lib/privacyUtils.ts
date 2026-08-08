@@ -16,6 +16,7 @@ import { db, handleFirestoreError, OperationType } from "./firebase";
 import { format } from "date-fns";
 
 export interface PrivacySettings {
+  userId?: string;
   dataCollection: boolean;
   shareAnalytics: boolean;
   personalizedAds: boolean;
@@ -23,12 +24,17 @@ export interface PrivacySettings {
   retentionPeriod: "6months" | "1year" | "2years" | "indefinite";
   exportFormat: "json" | "csv";
   lastUpdated: string;
+  dataRetentionEnabled?: boolean;
+  analyticsEnabled?: boolean;
+  sharingEnabled?: boolean;
+  exportRequestedAt?: string;
+  deletionRequestedAt?: string;
 }
 
 export interface ActivityLogEntry {
   id: string;
   action: string;
-  timestamp: Date;
+  timestamp: string;
   details: string;
   category: "auth" | "data" | "export" | "settings" | "deletion";
 }
@@ -124,6 +130,40 @@ export async function deleteUserData(userId: string): Promise<void> {
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, "userData");
   }
+}
+
+export async function fetchActivityLog(userId: string): Promise<ActivityLogEntry[]> {
+  try {
+    const snap = await getDocs(
+      query(
+        collection(db, 'activity_log'),
+        where('userId', '==', userId),
+      ),
+    );
+    return snap.docs.map((docSnap) => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        action: data.action || 'Unknown action',
+        timestamp:
+          typeof data.timestamp === 'string'
+            ? data.timestamp
+            : data.timestamp instanceof Date
+            ? data.timestamp.toISOString()
+            : data.timestamp?.toDate
+            ? data.timestamp.toDate().toISOString()
+            : new Date().toISOString(),
+        details: data.details || '',
+        category: data.category || 'auth',
+      };
+    });
+  } catch (error) {
+    return [];
+  }
+}
+
+export async function revokeUserSessions(userId: string): Promise<void> {
+  return;
 }
 
 export function downloadJSON(data: Record<string, any>, filename: string) {

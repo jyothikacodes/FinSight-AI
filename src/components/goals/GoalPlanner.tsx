@@ -37,6 +37,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { format, addMonths, isBefore } from 'date-fns';
+import { GoalCard } from '@/src/components/goals/GoalCard';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/src/components/ui/card';
 import { Button } from '@/src/components/ui/button';

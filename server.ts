@@ -10,6 +10,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import DOMPurify from "isomorphic-dompurify";
+import { safeJsonParse } from "./src/lib/utils";
 
 dotenv.config({ quiet: true });
 
@@ -56,6 +57,8 @@ const allowedOrigins = new Set(
     process.env.APP_URL,
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
   ].filter(
     (origin): origin is string => Boolean(origin) && origin !== "MY_APP_URL",
   ),
@@ -74,88 +77,6 @@ class PipelineError extends Error {
     this.name = "PipelineError";
     this.stage = stage;
     this.recommendation = recommendation;
-  }
-}
-
-function safeJsonParse(text: string): any {
-  let cleaned = (text || "").trim();
-  if (!cleaned) {
-    throw new Error("Empty model response");
-  }
-
-  // 1. Extract JSON block if surrounded by markdown or other text
-  const firstBrace = cleaned.indexOf("{");
-  const lastBrace = cleaned.lastIndexOf("}");
-  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-    cleaned = cleaned.substring(firstBrace, lastBrace + 1);
-  }
-
-  // 2. Try parsing directly
-  try {
-    return JSON.parse(cleaned);
-  } catch (err: any) {
-    // 3. Perform common repairs:
-    // a. Remove trailing commas before closing braces/brackets
-    let repaired = cleaned
-      .replace(/,\s*([}\]])/g, "$1") // trailing commas
-      // b. Handle unescaped newlines in JSON strings.
-      .replace(/"([^"\\]*(?:\\.[^"\\]*)*)"/g, (match, p1) => {
-        return '"' + p1.replace(/\n/g, "\\n").replace(/\r/g, "\\r") + '"';
-      });
-
-    try {
-      return JSON.parse(repaired);
-    } catch (err2: any) {
-      // c. Attempt to repair truncated JSON by appending missing brackets
-      let openBraces = 0;
-      let openBrackets = 0;
-      let inString = false;
-      let escape = false;
-      let repairStr = repaired;
-
-      for (let i = 0; i < repairStr.length; i++) {
-        const char = repairStr[i];
-        if (escape) {
-          escape = false;
-          continue;
-        }
-        if (char === "\\") {
-          escape = true;
-          continue;
-        }
-        if (char === '"') {
-          inString = !inString;
-          continue;
-        }
-        if (!inString) {
-          if (char === "{") openBraces++;
-          else if (char === "}") openBraces--;
-          else if (char === "[") openBrackets++;
-          else if (char === "]") openBrackets--;
-        }
-      }
-
-      if (inString) {
-        repairStr += '"';
-      }
-
-      while (openBrackets > 0) {
-        repairStr += "]";
-        openBrackets--;
-      }
-      while (openBraces > 0) {
-        repairStr += "}";
-        openBraces--;
-      }
-
-      try {
-        return JSON.parse(repairStr);
-      } catch (err3: any) {
-        throw new Error(
-          `JSON parsing failed after all repairs. Original: ${err.message}. Repaired: ${err3.message}`,
-        );
-      }
-    }
   }
 }
 

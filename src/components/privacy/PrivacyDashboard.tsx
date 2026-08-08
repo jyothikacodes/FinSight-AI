@@ -21,7 +21,6 @@ import {
   Eye,
   Activity,
 } from "lucide-react";
-import SessionManager from "@/src/components/privacy/SessionManager";
 import {
   exportUserData,
   deleteUserData,
@@ -52,12 +51,18 @@ export function PrivacyDashboard({ user }: { user: any }) {
       setActivityLog(logs);
       setPrivacySettings({
         userId: user.uid,
+        dataCollection: true,
+        shareAnalytics: true,
+        personalizedAds: false,
+        thirdPartySharing: false,
+        retentionPeriod: "1year",
+        exportFormat: "json",
+        lastUpdated: new Date().toISOString(),
         dataRetentionEnabled: true,
         analyticsEnabled: true,
         sharingEnabled: false,
         exportRequestedAt: "",
         deletionRequestedAt: "",
-        updatedAt: new Date().toISOString(),
       });
     } catch (error) {
       console.error("Failed to load privacy data:", error);
@@ -303,7 +308,7 @@ export function PrivacyDashboard({ user }: { user: any }) {
         </div>
 
         <div className="space-y-6">
-          <SessionManager user={user} />
+          {/* Session management component removed until implemented */}
         </div>
       </div>
     </div>
